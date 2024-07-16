@@ -24,18 +24,10 @@ jobs:
                   profile: minimal
                   toolchain: stable
                   override: true
-
             - name: Bump version
-              uses: tj-actions/cargo-bump@v3
-
-            - name: Commit changes
-              run: |
-                  git config --local user.email "github-actions[bot]@users.noreply.github.com"
-                  git config --local user.name "github-actions[bot]"
-                  git add Cargo.toml
-                  git add Cargo.lock
-                  git commit -m "Bump version"
-                  git push origin HEAD:main
+              uses: cute-lights/bump-version@main
+              with:
+                  files: "Cargo.toml"
 
             - name: Publish to crates.io
               run: cargo publish --token ${CRATES_TOKEN}
