@@ -6,12 +6,13 @@ use std::time::Duration;
 async fn main() -> CuteResult<()> {
     let mut lights = discover_lights().await;
 
+    let mut state = true;
     loop {
-       for light in lights.iter_mut() {
-            light.set_on(true).await?;
-            light.set_color(255, 0, 0).await?;
-            light.set_brightness(100).await?;
-            sleep(Duration::from_secs(1));
+        for light in lights.iter_mut() {
+            light.set_on(state).await?;
+
+            state = !state;
+            sleep(Duration::from_secs(2));
         }
     }
 }

@@ -24,6 +24,7 @@ pub struct KasaLight {
     supports_color: bool,
     id: String,
     name: String,
+    dev_type: KasaLightType,
 }
 
 impl KasaLight {
@@ -33,12 +34,20 @@ impl KasaLight {
 
         let json: serde_json::Value = serde_json::from_str(&response).unwrap();
 
+        println!("{}", json);
         let state: SysInfo = serde_json::from_value(json["system"]["get_sysinfo"].clone())?;
+
         let (red, green, blue) = crate::utils::color::hsv_to_rgb(
             state.light_state.hue.unwrap_or(0),
             state.light_state.saturation.unwrap_or(0),
             state.light_state.brightness.unwrap_or(0),
         );
+
+        let dev_type = if state.model.contains("KL400L10") {
+            KasaLightType::Strip
+        } else {
+            KasaLightType::Bulb
+        };
 
         Ok(KasaLight {
             ip,
@@ -50,6 +59,7 @@ impl KasaLight {
             supports_color: state.is_color,
             name: state.alias,
             id: state.mic_mac,
+            dev_type,
         })
     }
 
@@ -113,7 +123,10 @@ impl KasaLight {
 #[async_trait]
 impl Light for KasaLight {
     async fn set_on(&mut self, on: bool) -> anyhow::Result<()> {
-        let msg = on_off_message(on);
+        let msg = match self.dev_type {
+            KasaLightType::Bulb => light_on_off_message(on),
+            KasaLightType::Strip => strip_on_off_message(on),
+        };
         match KasaLight::send(self.ip.clone(), msg.to_string()).await {
             Ok(_) => {
                 self.is_on = on;
@@ -125,7 +138,10 @@ impl Light for KasaLight {
 
     async fn set_color(&mut self, red: u8, green: u8, blue: u8) -> anyhow::Result<()> {
         let (h, s, b) = crate::utils::color::rgb_to_hsv(red, green, blue);
-        let msg = color_message(h, s, b);
+        let msg = match self.dev_type {
+            KasaLightType::Bulb => light_color_message(h, s, b),
+            KasaLightType::Strip => strip_color_message(h, s, b),
+        };
         match KasaLight::send(self.ip.clone(), msg.to_string()).await {
             Ok(_) => {
                 self.red = red;
@@ -138,7 +154,10 @@ impl Light for KasaLight {
     }
 
     async fn set_brightness(&mut self, brightness: u8) -> anyhow::Result<()> {
-        let msg = brightness_message(brightness as i64);
+        let msg = match self.dev_type {
+            KasaLightType::Bulb => light_brightness_message(brightness as i64),
+            KasaLightType::Strip => strip_brightness_message(brightness as i64),
+        };
         match KasaLight::send(self.ip.clone(), msg.to_string()).await {
             Ok(_) => {
                 self.brightness = brightness;
@@ -231,6 +250,7 @@ struct SysInfo {
     #[serde(deserialize_with = "boolean_int")]
     is_color: bool,
     light_state: LightState,
+    model: String,
 }
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 
@@ -242,18 +262,18 @@ struct LightState {
     saturation: Option<i64>,
 }
 
-fn on_off_message(on: bool) -> serde_json::Value {
+fn light_on_off_message(on: bool) -> serde_json::Value {
     json!({
         "smartlife.iot.smartbulb.lightingservice": {
             "transition_light_state": {
                 "on_off": if on { 1 } else { 0 },
-                "transition_period": 0
+                "transition_period": 500
             }
         }
     })
 }
 
-fn color_message(h: i64, s: i64, b: i64) -> serde_json::Value {
+fn light_color_message(h: i64, s: i64, b: i64) -> serde_json::Value {
     json!({
         "smartlife.iot.smartbulb.lightingservice": {
             "transition_light_state": {
@@ -261,19 +281,56 @@ fn color_message(h: i64, s: i64, b: i64) -> serde_json::Value {
                 "hue": h,
                 "saturation": s,
                 "brightness": b,
-                "transition_period": 0
+                "transition_period": 500
             }
         }
     })
 }
 
-fn brightness_message(brightness: i64) -> serde_json::Value {
+fn light_brightness_message(brightness: i64) -> serde_json::Value {
     json!({
         "smartlife.iot.smartbulb.lightingservice": {
             "transition_light_state": {
                 "on_off": 1,
                 "brightness": brightness,
-                "transition_period": 0
+                "transition_period":500
+            }
+        }
+    })
+}
+
+fn strip_on_off_message(on: bool) -> serde_json::Value {
+    json!({
+        "smartlife.iot.lightStrip": {
+            "set_light_state": {
+                "on_off": if on { 1 } else { 0 },
+                "transition_period": 500
+            }
+        }
+    })
+}
+
+fn strip_color_message(h: i64, s: i64, b: i64) -> serde_json::Value {
+    json!({
+        "smartlife.iot.lightStrip": {
+            "set_light_state": {
+                "on_off": 1,
+                "hue": h,
+                "saturation": s,
+                "brightness": b,
+                "transition_period": 500
+            }
+        }
+    })
+}
+
+fn strip_brightness_message(brightness: i64) -> serde_json::Value {
+    json!({
+        "smartlife.iot.lightStrip": {
+            "set_light_state": {
+                "on_off": 1,
+                "brightness": brightness,
+                "transition_period": 500
             }
         }
     })
@@ -285,4 +342,10 @@ fn get_sysinfo_message() -> serde_json::Value {
             "get_sysinfo": {}
         }
     })
+}
+
+#[derive(Debug, Clone)]
+enum KasaLightType {
+    Bulb,
+    Strip,
 }
