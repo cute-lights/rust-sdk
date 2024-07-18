@@ -30,8 +30,6 @@ jobs:
                   files: "Cargo.toml"
 
             - name: Publish to crates.io
-              run: |
-                  git add . 
-                  cargo publish ---allow-dirty
+              run: cargo publish --allow-dirty --token ${CRATES_TOKEN}
               env:
                   CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}
