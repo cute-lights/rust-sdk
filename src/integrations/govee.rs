@@ -24,7 +24,11 @@ pub struct GoveeLight {
 }
 
 impl GoveeLight {
-    pub async fn new(udp_socket: Arc<UdpSocket>, ip: &str, mac: &str) -> anyhow::Result<GoveeLight> {
+    pub async fn new(
+        udp_socket: Arc<UdpSocket>,
+        ip: &str,
+        mac: &str,
+    ) -> anyhow::Result<GoveeLight> {
         let device_addr = SocketAddr::new(IpAddr::V4(ip.parse()?), 4003);
 
         let msg = Request::DevStatus {};
@@ -65,7 +69,6 @@ impl Light for GoveeLight {
                 g: green,
                 b: blue,
             },
-            color_temperature_kelvin: 7200,
         };
         send_message(&self.udp_socket, &self.device_addr, msg, false).await?;
         self.red = red;
@@ -143,10 +146,7 @@ impl Integration for GoveeIntegration {
 
         let discovered = tokio::time::timeout(
             std::time::Duration::from_millis(config.govee.scan_timeout),
-            discover_ids(
-                client_sock.clone(),
-                config.govee.addresses.clone(),
-            ),
+            discover_ids(client_sock.clone(), config.govee.addresses.clone()),
         )
         .await??;
 
@@ -308,11 +308,7 @@ pub enum Request {
     #[serde(rename = "brightness")]
     Brightness { value: u8 },
     #[serde(rename = "colorwc")]
-    Color {
-        color: DeviceColor,
-        #[serde(rename = "colorTemInKelvin")]
-        color_temperature_kelvin: u32,
-    },
+    Color { color: DeviceColor },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
