@@ -34,7 +34,6 @@ impl KasaLight {
 
         let json: serde_json::Value = serde_json::from_str(&response).unwrap();
 
-        println!("{}", json);
         let state: SysInfo = serde_json::from_value(json["system"]["get_sysinfo"].clone())?;
 
         let (red, green, blue) = crate::utils::color::hsv_to_rgb(
