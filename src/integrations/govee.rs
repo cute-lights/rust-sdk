@@ -3,8 +3,7 @@ use crate::utils::json::boolean_int;
 use crate::{config::CuteLightsConfig, utils::future::FutureBatch};
 use serde::{Deserialize, Serialize};
 use std::{
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    str::FromStr,
+    net::{IpAddr, SocketAddr},
     sync::Arc,
 };
 use tokio::net::UdpSocket;
@@ -27,7 +26,6 @@ impl GoveeLight {
     pub async fn new(
         udp_socket: Arc<UdpSocket>,
         ip: &str,
-        mac: &str,
     ) -> anyhow::Result<GoveeLight> {
         let device_addr = SocketAddr::new(IpAddr::V4(ip.parse()?), 4003);
 
@@ -48,7 +46,7 @@ impl GoveeLight {
             red: response.color.r,
             green: response.color.g,
             blue: response.color.b,
-            id: mac.to_string(),
+            id: ip.to_string(),
         })
     }
 }
@@ -144,22 +142,13 @@ impl Integration for GoveeIntegration {
         let mut batch = FutureBatch::new();
         let client_sock = Arc::new(UdpSocket::bind("0.0.0.0:4002").await?);
 
-        let discovered = tokio::time::timeout(
-            std::time::Duration::from_millis(config.govee.scan_timeout),
-            discover_ids(client_sock.clone(), config.govee.addresses.clone()),
-        )
-        .await??;
-
-        for (ip, mac) in discovered {
+        for ip in &config.govee.addresses {
             let client_sock = client_sock.clone();
             batch.push(async move {
-                match GoveeLight::new(client_sock, &ip, &mac).await {
+                match GoveeLight::new(client_sock.clone(), &ip).await {
                     Ok(light) => Some(Box::new(light) as Box<dyn Light>),
                     Err(e) => {
-                        eprintln!(
-                            "Failed to connect to Govee light at {} {:?}: {}",
-                            ip, mac, e
-                        );
+                        eprintln!("Failed to connect to Govee light at {}: {}", ip, e);
                         None
                     }
                 }
@@ -172,97 +161,6 @@ impl Integration for GoveeIntegration {
     fn preflight(config: &CuteLightsConfig) -> bool {
         config.govee.enabled
     }
-}
-
-// ANCHOR - Multicast Discovery
-
-const MULTICAST_GROUP: &str = "239.255.255.250";
-const MULTICAST_PORT: u16 = 4001;
-const MULTICAST_TTL: u32 = 2;
-
-pub async fn discover_ids(
-    client_sock: Arc<UdpSocket>,
-    ips: Vec<String>,
-) -> anyhow::Result<Vec<(String, String)>> {
-    let (tx, mut rx) = tokio::sync::mpsc::channel(32);
-
-    tokio::spawn(async move {
-        client_sock
-            .join_multicast_v4(
-                Ipv4Addr::from_str(MULTICAST_GROUP).unwrap(),
-                Ipv4Addr::UNSPECIFIED,
-            )
-            .expect("Failed to join multicast group");
-
-        let mut buf = [0; 10240];
-        loop {
-            if let Ok((size, _)) = client_sock.recv_from(&mut buf).await {
-                let res = tx
-                    .send(String::from_utf8_lossy(&buf[..size]).to_string())
-                    .await;
-                if let Err(_) = res {
-                    break;
-                }
-            }
-        }
-
-        client_sock
-            .leave_multicast_v4(
-                Ipv4Addr::from_str(MULTICAST_GROUP).unwrap(),
-                Ipv4Addr::UNSPECIFIED,
-            )
-            .expect("Failed to leave multicast group");
-    });
-
-    tokio::spawn(async move {
-        let message = r#"
-        {
-            "msg": {
-                "cmd": "scan",
-                "data": {
-                    "account_topic": "reserve"
-                }
-            }
-        }
-    "#;
-
-        let socket = UdpSocket::bind("0.0.0.0:0")
-            .await
-            .expect("Failed to bind socket");
-        socket
-            .set_multicast_ttl_v4(MULTICAST_TTL)
-            .expect("Failed to set TTL");
-
-        let json_result = message.trim().to_string();
-
-        socket
-            .send_to(
-                json_result.as_bytes(),
-                format!("{}:{}", MULTICAST_GROUP, MULTICAST_PORT),
-            )
-            .await
-            .expect("Failed to send message");
-    });
-
-    let mut results = Vec::new();
-
-    while let Some(message) = rx.recv().await {
-        let response: ResponseMessage = serde_json::from_str(&message).unwrap();
-
-        if let Response::Scan(device) = response.msg {
-            if ips.contains(&device.ip.to_string()) {
-                results.push((device.ip.to_string(), device.device));
-            }
-        }
-
-        if results.len() == ips.len() {
-            break;
-        }
-    }
-
-    rx.close();
-
-    Ok(results)
 }
 // ANCHOR - Messages
 

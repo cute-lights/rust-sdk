@@ -5,11 +5,15 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> CuteResult<()> {
     let mut lights = discover_lights().await;
-
+    println!("Found {} lights", lights.len());
     let mut state = true;
+
     loop {
+
         for light in lights.iter_mut() {
+            println!("Setting light {} to {}", light.name(), state);
             light.set_on(state).await?;
+
 
             state = !state;
             sleep(Duration::from_secs(2));
