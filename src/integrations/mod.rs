@@ -23,6 +23,7 @@ pub trait Light
 where
     Self: std::marker::Send + std::marker::Sync,
 {
+    async fn refresh_state(&mut self) -> anyhow::Result<()>;
     async fn set_on(&mut self, on: bool) -> anyhow::Result<()>;
     async fn set_color(&mut self, r: u8, g: u8, b: u8) -> anyhow::Result<()>;
     async fn set_brightness(&mut self, brightness: u8) -> anyhow::Result<()>;

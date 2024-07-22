@@ -23,36 +23,44 @@ pub struct GoveeLight {
 }
 
 impl GoveeLight {
-    pub async fn new(
-        udp_socket: Arc<UdpSocket>,
-        ip: &str,
-    ) -> anyhow::Result<GoveeLight> {
+    pub async fn new(udp_socket: Arc<UdpSocket>, ip: &str) -> anyhow::Result<GoveeLight> {
         let device_addr = SocketAddr::new(IpAddr::V4(ip.parse()?), 4003);
+        let mut dev = GoveeLight {
+            udp_socket,
+            device_addr,
+            is_on: false,
+            brightness: 0,
+            red: 0,
+            green: 0,
+            blue: 0,
+            id: ip.to_string(),
+        };
 
+        dev.refresh_state().await?;
+        Ok(dev)
+    }
+}
+
+#[async_trait::async_trait]
+impl Light for GoveeLight {
+    async fn refresh_state(&mut self) -> anyhow::Result<()> {
         let msg = Request::DevStatus {};
-
-        let response = send_message(&udp_socket, &device_addr, msg, true).await?;
+        let response = send_message(&self.udp_socket, &self.device_addr, msg, true).await?;
 
         let response = match response {
             Response::DevStatus(status) => status,
             _ => return Err(anyhow::anyhow!("Unexpected response")),
         };
 
-        Ok(GoveeLight {
-            udp_socket,
-            device_addr,
-            is_on: response.on,
-            brightness: response.brightness as u8,
-            red: response.color.r,
-            green: response.color.g,
-            blue: response.color.b,
-            id: ip.to_string(),
-        })
-    }
-}
+        self.is_on = response.on;
+        self.brightness = response.brightness as u8;
+        self.red = response.color.r;
+        self.green = response.color.g;
+        self.blue = response.color.b;
 
-#[async_trait::async_trait]
-impl Light for GoveeLight {
+        Ok(())
+    }
+
     async fn set_on(&mut self, on: bool) -> anyhow::Result<()> {
         let msg = Request::Turn { value: on as u8 };
         send_message(&self.udp_socket, &self.device_addr, msg, false).await?;

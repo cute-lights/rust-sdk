@@ -29,37 +29,20 @@ pub struct KasaLight {
 
 impl KasaLight {
     pub async fn new(ip: String) -> anyhow::Result<KasaLight> {
-        let data = get_sysinfo_message();
-        let response = KasaLight::send(ip.clone(), data.to_string()).await?;
-
-        let json: serde_json::Value = serde_json::from_str(&response).unwrap();
-
-        let state: SysInfo = serde_json::from_value(json["system"]["get_sysinfo"].clone())?;
-
-        let (red, green, blue) = crate::utils::color::hsv_to_rgb(
-            state.light_state.hue.unwrap_or(0),
-            state.light_state.saturation.unwrap_or(0),
-            state.light_state.brightness.unwrap_or(0),
-        );
-
-        let dev_type = if state.model.contains("KL400L10") {
-            KasaLightType::Strip
-        } else {
-            KasaLightType::Bulb
-        };
-
-        Ok(KasaLight {
+        let mut dev = KasaLight {
             ip,
-            is_on: state.light_state.on_off,
-            brightness: state.light_state.brightness.unwrap_or(0) as u8,
-            red,
-            green,
-            blue,
-            supports_color: state.is_color,
-            name: state.alias,
-            id: state.mic_mac,
-            dev_type,
-        })
+            is_on: false,
+            brightness: 0,
+            red: 0,
+            green: 0,
+            blue: 0,
+            supports_color: false,
+            name: "Unknown".to_string(),
+            id: "Unknown".to_string(),
+            dev_type: KasaLightType::Bulb,
+        };
+        dev.refresh_state().await?;
+        Ok(dev)
     }
 
     async fn send(ip: String, data: String) -> anyhow::Result<String> {
@@ -121,6 +104,40 @@ impl KasaLight {
 
 #[async_trait]
 impl Light for KasaLight {
+
+    async fn refresh_state(&mut self) -> anyhow::Result<()> {
+        let data = get_sysinfo_message();
+        let response = KasaLight::send(self.ip.clone(), data.to_string()).await?;
+
+        let json: serde_json::Value = serde_json::from_str(&response).unwrap();
+
+        let state: SysInfo = serde_json::from_value(json["system"]["get_sysinfo"].clone())?;
+
+        let (red, green, blue) = crate::utils::color::hsv_to_rgb(
+            state.light_state.hue.unwrap_or(0),
+            state.light_state.saturation.unwrap_or(0),
+            state.light_state.brightness.unwrap_or(0),
+        );
+
+        let dev_type = if state.model.contains("KL400L10") {
+            KasaLightType::Strip
+        } else {
+            KasaLightType::Bulb
+        };
+
+        self.dev_type = dev_type;
+        self.is_on = state.light_state.on_off;
+        self.brightness = state.light_state.brightness.unwrap_or(0) as u8;
+        self.red = red;
+        self.green = green;
+        self.blue = blue;
+        self.supports_color = state.is_color;
+        self.name = state.alias;
+        self.id = state.mic_mac;
+
+        Ok(())
+    }
+
     async fn set_on(&mut self, on: bool) -> anyhow::Result<()> {
         let msg = match self.dev_type {
             KasaLightType::Bulb => light_on_off_message(on),

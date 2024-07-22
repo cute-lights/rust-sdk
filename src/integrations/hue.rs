@@ -20,6 +20,12 @@ pub struct HueLight {
 
 #[async_trait::async_trait]
 impl Light for HueLight {
+
+    async fn refresh_state(&mut self) -> anyhow::Result<()> {
+        // TODO: Implement refresh_state for HueLight
+        Ok(())
+    }
+
     async fn set_on(&mut self, on: bool) -> anyhow::Result<()> {
         let url = format!(
             "http://{}/api/{}/lights/{}/state",
