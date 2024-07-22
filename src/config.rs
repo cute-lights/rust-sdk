@@ -1,12 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use crate::integrations::{govee::GoveeConfig, hue::HueConfig, kasa::KasaConfig};
+use crate::integrations::{govee::GoveeConfig, hue::HueConfig, kasa::KasaConfig, openrgb::OpenRgbConfig};
 
 #[derive(Debug, Deserialize, Clone, Serialize, Default)]
 pub struct CuteLightsConfig {
     pub kasa: KasaConfig,
     pub govee: GoveeConfig,
     pub hue: HueConfig,
+    pub openrgb: OpenRgbConfig,
 }
 
 impl CuteLightsConfig {

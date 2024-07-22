@@ -3,6 +3,7 @@ use crate::config::CuteLightsConfig;
 pub mod govee;
 pub mod hue;
 pub mod kasa;
+pub mod openrgb;
 
 // ANCHOR - ImplementationDiscoverer
 #[async_trait::async_trait]

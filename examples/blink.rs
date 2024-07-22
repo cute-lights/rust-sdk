@@ -13,6 +13,7 @@ async fn main() -> CuteResult<()> {
         for light in lights.iter_mut() {
             println!("Setting light {} to {}", light.name(), state);
             light.set_on(state).await?;
+            light.set_color(255, 0, 0).await?;
 
 
             state = !state;

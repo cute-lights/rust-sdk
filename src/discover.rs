@@ -1,6 +1,9 @@
 use crate::{
     config::CuteLightsConfig,
-    integrations::{govee::GoveeIntegration, hue::HueIntegration, kasa::KasaIntegration, Integration, Light},
+    integrations::{
+        govee::GoveeIntegration, hue::HueIntegration, kasa::KasaIntegration,
+        openrgb::OpenRgbIntegration, Integration, Light,
+    },
     utils::future::FutureBatch,
 };
 
@@ -21,11 +24,12 @@ impl Discoverer {
         let config = self.config;
         if I::preflight(&self.config) {
             self.batch.push(async move {
-                if let Ok(lights) = I::discover(&config).await {
-                    lights
-                } else {
-                    eprintln!("Failed to discover lights for {}", I::name());
-                    Vec::new()
+                match I::discover(&config).await {
+                    Ok(lights) => lights,
+                    Err(e) => {
+                        eprintln!("Failed to discover lights for {}: {}", I::name(), e);
+                        Vec::new()
+                    }
                 }
             });
         }
@@ -43,6 +47,7 @@ pub async fn discover_lights() -> Vec<Box<dyn Light>> {
     discoverer.register::<KasaIntegration>();
     discoverer.register::<HueIntegration>();
     discoverer.register::<GoveeIntegration>();
+    discoverer.register::<OpenRgbIntegration>();
 
     discoverer.run().await
 }
